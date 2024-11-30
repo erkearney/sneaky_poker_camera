@@ -3,7 +3,11 @@ from typing import Optional
 from .camera.capture import CameraController
 from .vision.card_detection import CardDetector
 
+<<<<<<< HEAD
 class SneakyPokerCamera:
+=======
+class SneakPokerCamera:
+>>>>>>> 7a22573ad37b92e9c878c4903f2a50138d6074e5
     """Main application class"""
     def __init__(self, model_path: Optional[str] = None):
         self.camera = CameraController()
