@@ -1,7 +1,8 @@
 import cv2
 import numpy as np
 from numpy.typing import NDArray
-from typing import Optional, Tuple
+from typing import Optional, List, Tuple
+from card_finder import CardFinder, CardFinderConfig
 
 class CardPreprocessor:
     """
@@ -14,82 +15,81 @@ class CardPreprocessor:
         5. Apply Canny edges
         6. Apply dilation filter
     """
-    def __init__(self, target_size: Tuple[int, int] = (224, 224), debug: bool = False):
-        self.target_size = target_size
+    def __init__(self, card_finder: Optional[CardFinder] = None, debug: bool = False):
+        self.card_finder = card_finder or CardFinder(debug=debug)
         self.debug = debug
 
     
-    def preprocess_image(self, image: NDArray) -> Optional[NDArray]:
+    def preprocess_cards(self, image: NDArray) -> List[NDArray]:
         """
-        Preprocessors images to help neural network detect playing cards.
+        Find and preprocess all cards in the image.
 
         Args:
-           image (NDArray): The image to preprocess
+            image (NDArray): Input image
 
         Returns:
-           NDArray: The preprocessed image
+            List[NDArray]: List of preprocessed card images
+        """
+        cards = self.card_finder.find_cards(image)
+        return [self.preprocess_single_card(card) for card in cards if card is not None]
+
+    def preprocess_single_card(self, card: NDArray) -> Optional[NDArray]:
+        """
+        Apply preprocessing steps to a single card image.
+
+        Args:
+            card (NDArray): Card image to process
+
+        Returns:
+            Optional[NDArray]: Preprocessed card image
         """
         try:
-            self.show_image("0. Original Image", image)
-
-            height, width = image.shape[:2]
-            min_dim = min(height, width)
-
-            max_working_dim = 1000
-            if min_dim > max_working_dim:
-                scale = max_working_dim / min_dim
-                working_image = cv2.resize(image, None, fx=scale, fy=scale)
-                self.show_image("1. Resized image", working_image)
-            else:
-                working_image = image.copy()
-
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            self.show_image("2. Grayscale", gray)
-
+            gray = cv2.cvtColor(card, cv2.COLOR_BGR2GRAY)
+            self._show_debug("Grayscale", gray)
+            
             blurred = cv2.GaussianBlur(gray, (7, 7), 0)
-            self.show_image("3. Blurred", blurred)
+            self._show_debug("Blurred", blurred)
 
             thresh = cv2.adaptiveThreshold(
-                    blurred,
-                    255,
-                    cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                    cv2.THRESH_BINARY,
-                    11,
-                    2
+                blurred,
+                255,
+                cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                cv2.THRESH_BINARY,
+                11,
+                2
             )
-            self.show_image("4. Adaptive Threshold", thresh)
+            self._show_debug("Adaptive Threshold", thresh)
 
             edges = cv2.Canny(blurred, 30, 50)
-            self.show_image("5. Canny Edges", edges)
+            self._show_debug("Canny Edges", edges)
 
             kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
             dilated = cv2.dilate(edges, kernel, iterations=1)
-            self.show_image("6. Dilated Edges", dilated)
+            self._show_debug("Dilated Edges", dilated, wait=True)
 
-            final = cv2.resize(dilated, self.target_size)
-            self.show_image("7. Final result", final, wait=True)
-
-            return final
+            return dilated
         except Exception as e:
-            print(f"Error during image preprocessing: {e}")
+            print(f"ERROR - process_single_card(): {e}")
             return None
 
 
-    def show_image(self, name: str, image: NDArray, wait: bool = True) -> None:
+    def _show_debug(self, name: str, image: NDArray, wait: bool = True) -> None:
+        """Display debug images if debug mode is enabled"""
         if self.debug:
             cv2.namedWindow(name, cv2.WINDOW_NORMAL)
             height, width = image.shape[:2]
             max_dim = 800
             if max(height, width) > max_dim:
+                print(f"INFO - _show_debug(): scaling image")
                 scale = max_dim / max(height, width)
                 cv2.resizeWindow(name, int(width * scale), int(height * scale))
             cv2.imshow(name, image)
             if wait:
                 key = cv2.waitKey(0)
-                if key == ord('q'):
+                if key == ord("q"):
                     self.debug = False
                 cv2.destroyWindow(name)
-
+    
 
 if __name__ == "__main__":
     """
@@ -99,7 +99,7 @@ if __name__ == "__main__":
     from pathlib import Path
 
     try:
-        image_path = Path("captured_image.jpg")
+        image_path = Path("capture.jpg")
         if not image_path.exists():
             print(f"ERROR: Image not found at {image_path}")
             sys.exit(1)
@@ -109,17 +109,14 @@ if __name__ == "__main__":
             print(f"ERROR: Failed to load test image")
             sys.exit(1)
 
-        card_preprocessor = CardPreprocessor(debug=True)
-        processed_image = card_preprocessor.preprocess_image(image)
-
-        if processed_image is not None:
-            output_path = Path("preprocessed_card.jpg")
-            cv2.imwrite(str(output_path), processed_image)
-            print(f"Preprocseed image saved to {output_path}")
-            print(f"Processed shape: {processed_image.shape}")
+        preprocessor = CardPreprocessor(debug=True)
+        processed_cards = preprocessor.preprocess_cards(image)
+        if processed_cards:
+            print(f"Found and processed {len(processed_cards)} cards")
+            for i, card in enumerate(processed_cards):
+                cv2.imwrite(f"procseed_card_{i}.jpg", card)
+                print(f"INFO - main: Saved to processed_card_{i}.jpg")
         else:
-            print("ERROR: Failed to preprocess image")
-
-
+            print("WARN - main: No cards found or processed")
     except Exception as e:
         print(f"ERROR: {e}")
