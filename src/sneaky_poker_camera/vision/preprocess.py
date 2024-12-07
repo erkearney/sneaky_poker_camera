@@ -2,7 +2,8 @@ import cv2
 import numpy as np
 from numpy.typing import NDArray
 from typing import Optional, List, Tuple
-from card_finder import CardFinder, CardFinderConfig
+from .card_finder import CardFinder, CardFinderConfig
+#from card_finder import CardFinder, CardFinderConfig
 
 class CardPreprocessor:
     """
