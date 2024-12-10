@@ -7,7 +7,7 @@ from .card_finder import CardFinder, CardFinderConfig
 
 class CardPreprocessor:
     """
-    Preprocessors images to help neural network detect playing cards. Preprocessing
+    Preprocesses images to help neural network detect playing cards. Preprocessing
     steps are:
         1. Resize image
         2. Convert to grayscale
@@ -115,7 +115,7 @@ if __name__ == "__main__":
         if processed_cards:
             print(f"Found and processed {len(processed_cards)} cards")
             for i, card in enumerate(processed_cards):
-                cv2.imwrite(f"procseed_card_{i}.jpg", card)
+                cv2.imwrite(f"processed_card_{i}.jpg", card)
                 print(f"INFO - main: Saved to processed_card_{i}.jpg")
         else:
             print("WARN - main: No cards found or processed")

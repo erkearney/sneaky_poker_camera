@@ -168,6 +168,7 @@ def create_data_splits(data_dir: str,
                                                           CardDataGenerator,
                                                           CardDataGenerator,
                                                           dict]:
+    """Create train, validation, and test data generators"""
     data_dir = Path(data_dir)
     classes = sorted([d.name for d in data_dir.iterdir() if d.is_dir()])
     class_mapping = {class_name: idx for idx, class_name in enumerate(classes)}
@@ -333,7 +334,7 @@ def train_card_model(data_dir: str,
         ) 
     ]
 
-    model = CardRecognitionModel(input_shape=input_shape)
+    model = CardRecognitionModel(input_shape=input_shape, num_classes=len(class_mapping))
     model.compile_model(learning_rate=learning_rate)
     model.model.summary()
 
@@ -345,10 +346,16 @@ def train_card_model(data_dir: str,
     )
 
     plot_training_history(history.history, output_dir)
-    evaluation_results = evaluate_model(model.model, test_gen, class_mapping, output_dir)
 
+    print("INFO - train_card_model(): Saving Keras model to {output_dir}")
     model.save_model(str(output_dir / "card_model.keras"))
-    model.convert_to_tflite(str(output_dir / "card_model.tflite"))
+    converter = tf.lite.TFLiteConverter.from_keras_model(model.model)
+    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    converter.target_spec.supported_types = [tf.float16]
+    tflite_model = converter.convert()
+    print("INFO - train_card_model(): Saving TFLITE model to {output_dir}")
+    with open(output_dir / "card_model.tflite", "wb") as f:
+        f.write(tflite_model)
 
     class_mapping_df = pd.DataFrame(
         list(data_loader.class_mapping.items()),
@@ -356,7 +363,7 @@ def train_card_model(data_dir: str,
     )
     class_mapping_df.to_csv(output_dir / "class_mapping.csv", index=False)
 
-    return model, history, evaluation_results
+    return model, history, test_gen, class_mapping
 
 
 def plot_training_history(history: Dict, output_dir: Path):
@@ -400,42 +407,35 @@ def plot_confusion_matrix(y_true: np.ndarray,
     plt.close()
 
 
-def evaluate_model(model,
-                    test_gen: CardDataGenerator,
+def save_test_split(test_paths: List[Path],
+                    test_labels: List[int],
                     class_mapping: dict,
-                    output_dir: Path) -> dict:
-    """Evaluate model on test test"""
-    all_predictions = []
-    all_labels = []
-    print(f"\nINFO - evaluate_model(): Evaluating model on test set")
-    for i in range(len(test_gen)):
-        x, y = test_gen[i]
-        predictions = model.predict(x, verbose=0)
-        pred_classes = np.argmax(predictions, axis=1)
-        all_predictions.extend(pred_classes)
-        all_labels.extend(y)
+                    output_dir: str) -> str:
+    """
+    Save test split images to a new directory maintaing class structure
 
+    Args:
+        test_paths: List of paths to test images
+        test_labels: List of corresponding labels
+        class_mapping: Dictionary mapping class names to indicies
+        output_dir: Base directory to save test split
+
+    Returns:
+        str: Path to test dataset directory
+    """
+    test_dir = Path(output_dir) / "test_dataset"
+    test_dir.mkdir(parents=True, exist_ok=True)
     reverse_mapping = {v: k for k, v in class_mapping.items()}
-    label_names = [reverse_mapping[i] for i in range(len(class_mapping))]
-    report = classification_report(
-        all_labels,
-        all_predictions,
-        target_names=label_names,
-        output_dict=True
-    )
-    report_df = pd.DataFrame(report).transpose()
-    report_df.to_csv(output_dir / "classification_report.csv")
-    plot_confusion_matrix(all_labels, all_predictions, class_mapping, output_dir)
-    print(f"\nINFO - evaluate_model(): Test set Evaluation:")
-    print(f"    Overall accuracy: {report['accuracy']:.4f}")
-    print("     \nPer-class metrics:")
-    for card, metrics in report.items():
-        if isinstance(metrics, dict):
-            print(f"    {card}: Precision={metrics['precision']:.4f}, "
-                  f"    Recall={metrics['recall']:.4f}, "
-                  f"    F1-score={metrics['f1-score']:.4f}")
 
-    return report
+    for class_name in class_mapping.keys():
+        (test_dir / class_name).mkdir(exist_ok=True)
+    for img_path, label in zip(test_paths, test_labels):
+        class_name = reverse_mapping[label]
+        dest_path = test_dir / class_name / img_path.name
+        import shutil
+        shutil.copy2(img_path, dest_path)
+    print(f"\nINFO - save_test_split(): Test dataset saved to: {test_dir}")
+    return str(test_dir)
 
 
 if __name__ == "__main__":
@@ -454,10 +454,17 @@ if __name__ == "__main__":
                         help="Initial learning rate")
     args = parser.parse_args()
 
-    model, history, evaluation = train_card_model(
+    model, history, test_gen, class_mapping = train_card_model(
         args.data_dir,
         args.output_dir,
         epochs=args.epochs,
         batch_size=args.batch_size,
         learning_rate=args.learning_rate
+    )
+
+    test_dir = save_test_split(
+       test_paths=test_gen.image_paths,
+       test_labels=test_gen.labels,
+       class_mapping=class_mapping,
+       output_dir=args.output_dir
     )

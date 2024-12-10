@@ -30,7 +30,7 @@ class CardFinder:
         Finds and extracts playing cards from an image.
 
         Args:
-            image (NDArray): Input iamge
+            image (NDArray): Input image
 
         Returns:
             List[NDArray]: List of extract card images
@@ -41,13 +41,15 @@ class CardFinder:
             if min_dim > self.config.max_working_dim:
                 scale = self.config.max_working_dim / min_dim
                 working_image = cv2.resize(image, None, fx=scale, fy=scale)
-                self._show_debug("Resized for card identification", working_image)
+                self._show_debug("0. Resized for card identification", working_image)
             else:
                 working_image = image.copy()
                 scale = 1.0
 
             gray = cv2.cvtColor(working_image, cv2.COLOR_BGR2GRAY)
+            self._show_debug("1. Grayscale", gray)
             blurred = cv2.GaussianBlur(gray, (7, 7), 0)
+            self._show_debug("2. Gaussian blur", blurred)
             thresh = cv2.adaptiveThreshold(
                 blurred,
                 255,
@@ -56,11 +58,12 @@ class CardFinder:
                 11,
                 2
             )
-
+            self._show_debug("3. Adaptive Threshold", thresh)
             edges = cv2.Canny(blurred, 30, 150)
+            self._show_debug("4. Canny edges", edges)
             kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
             dilated = cv2.dilate(edges, kernel, iterations=2)
-            self._show_debug("Edge Detection", dilated)
+            self._show_debug("5. Dilated", dilated)
             contours, _ = cv2.findContours(
                 dilated,
                 cv2.RETR_EXTERNAL,
@@ -109,7 +112,7 @@ class CardFinder:
         approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
 
         if len(approx) != 4:
-            print("WARNINIG - _extract_card(): contour is not rectangular")
+            print("WARNING - _extract_card(): contour is not rectangular")
             return None
 
         rect = cv2.minAreaRect(contour)
@@ -152,6 +155,7 @@ class CardFinder:
             matrix,
             (target_width, target_height)
         )
+        self._show_debug("card", card)
 
         return cv2.resize(card, self.config.target_size)
 

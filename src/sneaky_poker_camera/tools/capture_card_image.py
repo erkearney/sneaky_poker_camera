@@ -11,7 +11,7 @@ sys.path.append(parent_dir)
 from camera.capture import CameraController
 from vision.card_finder import CardFinder
 
-def capture_card_image(card_name, output_dir = "../Pictures") -> None:
+def capture_card_image(card_name, output_dir = "../Pictures", debug=False) -> None:
     """
     Capture and process a card image, saving both the original and processed image.
 
@@ -25,7 +25,7 @@ def capture_card_image(card_name, output_dir = "../Pictures") -> None:
     processed_path.mkdir(parents=True, exist_ok=True)
 
     camera = CameraController()
-    finder = CardFinder(debug=False)
+    finder = CardFinder(debug=debug)
     
     try:
         print("Capturing image...")
@@ -55,6 +55,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Capture and process a single playing card image")
     parser.add_argument("card_name", help="Name of the card (e.g. 'AS' for Ace of Spaces')")
     parser.add_argument("--output-dir", default="../Pictures", help="Output directory for saved image")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     args = parser.parse_args()
 
-    capture_card_image(args.card_name, args.output_dir)
+    capture_card_image(args.card_name, args.output_dir, args.debug)
